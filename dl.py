@@ -11,7 +11,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import keras
-from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout
+from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply
 from keras.models import Sequential, Model, load_model
 from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -93,6 +93,14 @@ def standard_model(input_shape):
     model.add(BatchNormalization())
     model.add(Activation('softmax'))
     return model
+
+
+
+def senet_layer(x, nb_channels, ratio):
+    xd = GlobalAveragePooling2D()(x)
+    xd = Dense(nb_channels // ratio, activation='relu')
+    xd = Dense(nb_channels, activation='sigmoid')
+    return Multiply()([x, xd])
 
 
 
