@@ -105,3 +105,6 @@ venv.bak/
 
 # CIFAR100
 A3_Data/
+
+# IDE files
+.vscode/

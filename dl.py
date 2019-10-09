@@ -70,7 +70,7 @@ def densenet(input_shape, growth_rate=12, dense_blocks=3, dense_layers=12):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
     x = GlobalAveragePooling2D()(x)
-    x = Dense(10, activation='softmax', kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4), kernel_initializer='he_normal', bias_initializer='he_normal')(x)
+    x = Dense(100, activation='softmax', kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4), kernel_initializer='he_normal', bias_initializer='he_normal')(x)
 
     return Model(inputs, x, name='DenseNet')
 
@@ -89,7 +89,7 @@ def standard_model(input_shape):
     model.add(Dropout(0.25))
     model.add(Dense(256, activation='relu', kernel_initializer='he_normal', bias_initializer='he_normal'))
     model.add(Dropout(0.25))
-    model.add(Dense(10, kernel_initializer='he_normal', bias_initializer='he_normal'))
+    model.add(Dense(100, kernel_initializer='he_normal', bias_initializer='he_normal'))
     model.add(BatchNormalization())
     model.add(Activation('softmax'))
     return model
@@ -99,7 +99,8 @@ def standard_model(input_shape):
 def keras_cnn(args):
     with open(args.trainfile) as f:
         train = np.loadtxt(f, delimiter=' ')
-    x = train[:, :-1]
+
+    x = train[:, :-2]
     y = train[:, -1:]
     x = np.reshape(x, (x.shape[0], 32, 32, 3))
     lbl = LabelBinarizer()
@@ -107,7 +108,6 @@ def keras_cnn(args):
 
     model = standard_model(x.shape[1:])
     # model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
-    # model = resnet(x.shape[1:], depth=14)
 
     opt = adam()
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
@@ -120,7 +120,7 @@ def keras_cnn(args):
     
     with open(args.testfile) as f:
         test = np.loadtxt(f, delimiter=' ')
-    x = test[:, :-1]
+    x = test[:, :-2]
     x = np.reshape(x, (x.shape[0], 32, 32, 3))
     
     probs = model.predict(x)
