@@ -11,7 +11,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import keras
-from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout
+from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Add
 from keras.models import Sequential, Model, load_model
 from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -93,6 +93,90 @@ def standard_model(input_shape):
     model.add(BatchNormalization())
     model.add(Activation('softmax'))
     return model
+
+
+# Resnet
+
+def identity_block(input, f, F1, F2, F3):
+    X_stortcut = X
+
+    X = Conv2D(F1, (1, 1), strides=1, padding="same")(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+
+    X = Conv2D(F2, (f, f), strides=1, padding="same")(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+
+    X = Conv2D(F3, (1, 1), strides=1, padding="same")(X)
+    X = BatchNormalization(axis=3)(X)
+
+    X = Add()([X, X_shortcut])
+
+    X = Activation('relu')(X)
+
+    return X
+
+def convolution_block(X, f, F1, F2, F3, s=2):
+    X_shortcut = X
+
+    X = Conv2D(F1, (1, 1), strides=(s, s), padding="valid")(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+
+    X = Conv2D(F2, (f, f), strides=1, padding="same")(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+
+    X = Conv2D(F3, (1, 1), strides=1, padding="same")(X)
+    X = BatchNormalization(axis=3)(X)
+
+    X_shortcut = Conv2D(F3, (1, 1), strides=(s, s), padding="valid")(X_shortcut)
+    X_shortcut = BatchNormalization(axis=3)(X_shortcut)
+
+    X = Add()([X, X_shortcut])
+    X = Activation('relu')(X)
+
+    return X
+
+def ResNet50(input_shape):
+    X_input = Input(input_shape)
+
+    X = ZeroPadding2D((3, 3))(X_input)
+    X = Conv2D(64, (7, 7), strides = (1, 1))(X)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation('relu')(X)
+    X = MaxPooling2D((3, 3), strides=(2, 2))(X)
+
+    X = convolution_block(X, 3, 64, 64, 256, s=1)
+    X = identity_block(X, 3, 64, 64, 256)
+    X = identity_block(X, 3, 64, 64, 256)
+
+    X = convolution_block(X, 3, 128, 128, 512, s=2)
+    X = identity_block(X, 3, 128, 128, 512)
+    X = identity_block(X, 3, 128, 128, 512)
+
+    X = convolution_block(X, 3, 256, 256, 1024, s=2)
+    X = identity_block(X, 3, 256, 256, 1024)
+    X = identity_block(X, 3, 256, 256, 1024)
+    X = identity_block(X, 3, 256, 256, 1024)
+    X = identity_block(X, 3, 256, 256, 1024)
+    X = identity_block(X, 3, 256, 256, 1024)
+    X = identity_block(X, 3, 256, 256, 1024)
+
+    X = convolution_block(X, 3, 512, 512, 2048, s=2)
+    X = identity_block(X, 3, 512, 512, 2048)
+    X = identity_block(X, 3, 512, 512, 2048)
+    
+    X = AveragePooling2D(pool_size=(2,2))
+
+    X = Flatten(X)
+    X = Dense(100, activation='softmax')
+
+    model = Model(inputs=X_input, outputs=X)
+
+    return model
+
 
 
 
