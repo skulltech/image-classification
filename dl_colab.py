@@ -11,7 +11,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import keras
-from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, ZeroPadding2D, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add
+from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, ZeroPadding2D, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add
 from keras.models import Sequential, Model, load_model
 from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -188,8 +188,8 @@ def senet_layer(x, nb_channels, ratio):
 
 
 
-def keras_cnn(args):
-    with open(args.trainfile) as f:
+def keras_cnn():
+    with open("/content/drive/My Drive/CIFAR100 dataset/train.csv") as f:
         train = np.loadtxt(f, delimiter=' ')
 
     x = train[:, :-2]
@@ -210,30 +210,19 @@ def keras_cnn(args):
     model.fit(x, y, validation_split=0.1, epochs=100, batch_size=128, callbacks=[lmt, es, mc])
     model = load_model('checkpoint')
     
-    with open(args.testfile) as f:
+    with open("/content/drive/My Drive/CIFAR100 dataset/test.csv") as f:
         test = np.loadtxt(f, delimiter=' ')
     x = test[:, :-2]
     x = np.reshape(x, (x.shape[0], 32, 32, 3))
     
     probs = model.predict(x)
     preds = np.argmax(probs, axis=1)
-    np.savetxt(args.outputfile, preds, fmt='%i')
+    np.savetxt("outfile", preds, fmt='%i')
 
 
 
 def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('trainfile', type=str)
-    parser.add_argument('testfile', type=str)
-    parser.add_argument('outputfile', type=str)
-    parser.set_defaults(func=keras_cnn)
-
-    if len(sys.argv) < 2:
-        parser.print_help()
-        sys.exit(1)
-    args = parser.parse_args()
-    args.func(args)
+    keras_cnn()
 
 
 
