@@ -9,6 +9,7 @@ import tensorflow as tf
 
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+from keras import regularizers
 
 import keras
 from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, ZeroPadding2D, Activation, Input, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add
@@ -17,7 +18,7 @@ from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
 from sklearn.preprocessing import LabelBinarizer
 from keras.regularizers import l2
-
+weight_decay = 1e-4
 
 
 TTL = 6000
@@ -178,6 +179,66 @@ def ResNet50(input_shape):
     return model
 
 
+def claim_90():
+    model = Sequential()
+    weight_decay = 1e-4
+    model.add(Conv2D(32, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay), input_shape=(32, 32, 3)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
+
+    model.add(Conv2D(32, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
+
+    model.add(Conv2D(32, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.2))
+
+    model.add(Conv2D(64, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.3))
+    
+    model.add(Conv2D(64, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.3))
+
+    model.add(Conv2D(64, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.3))
+
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.3))
+    # model.add(Dropout(0.2))
+
+    model.add(Conv2D(128, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+    # model.add(Dropout(0.4))
+
+    model.add(Conv2D(128, kernel_size=3, padding="same", activation="elu", kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(BatchNormalization())
+
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.4))
+
+    model.add(Flatten())
+
+    model.add(Dense(512))
+    model.add(BatchNormalization())
+
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+
+    model.add(Dense(256))
+    model.add(BatchNormalization())
+
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(10))
+    model.add(BatchNormalization())
+    model.add(Activation('softmax'))
+    return model
 
 
 def senet_layer(x, nb_channels, ratio):
@@ -198,7 +259,7 @@ def keras_cnn():
     lbl = LabelBinarizer()
     y = lbl.fit_transform(y)
 
-    model = standard_model(x.shape[1:])
+    model = claim_90(x.shape[1:])
     # model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
 
     opt = adam()
