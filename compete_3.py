@@ -38,7 +38,6 @@ class LimitTrainingTime(Callback):
 def densenet_layer(x, nb_channels):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
-    x = Dropout(0.25)(x)
     x = Conv2D(nb_channels, (3, 3), padding='same', use_bias=False, kernel_regularizer=l2(1e-4), kernel_initializer='he_normal')(x)
     return x
 

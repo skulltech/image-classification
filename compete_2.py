@@ -38,14 +38,12 @@ class LimitTrainingTime(Callback):
 def densenet_layer(x, nb_channels):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
-    x = Dropout(0.25)(x)
     x = Conv2D(nb_channels, (3, 3), padding='same', use_bias=False, kernel_regularizer=l2(1e-4), kernel_initializer='he_normal')(x)
     return x
 
 def transition_layer(x, nb_channels):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
-    x = Dropout(0.25)(x)
     x = Conv2D(nb_channels, (1, 1), padding='same', use_bias=False, kernel_regularizer=l2(1e-4), kernel_initializer='he_normal')(x)
     x = AveragePooling2D((2, 2), strides=(2, 2))(x)
     return x
@@ -270,7 +268,7 @@ def keras_cnn(args):
     y = lbl.fit_transform(y)
 
     # model = claim_90()
-    model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
+    model = densenet(x.shape[1:], dense_layers=8, growth_rate=12)
 
     opt = adam()
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
@@ -287,7 +285,7 @@ def keras_cnn(args):
     x = np.reshape(x, (x.shape[0], 3, 32, 32))
     x = np.swapaxes(x, 1, 2)
     x = np.swapaxes(x, 2, 3)
-        
+    
     probs = model.predict(x)
     preds = np.argmax(probs, axis=1)
     np.savetxt(args.outputfile, preds, fmt='%i')
