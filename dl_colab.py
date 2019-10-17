@@ -18,6 +18,7 @@ from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
 from sklearn.preprocessing import LabelBinarizer
 from keras.regularizers import l2
+from keras import backend as K
 weight_decay = 1e-4
 
 
@@ -74,7 +75,6 @@ def densenet(input_shape, growth_rate=12, dense_blocks=3, dense_layers=12):
     x = Dense(100, activation='softmax', kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4), kernel_initializer='he_normal', bias_initializer='he_normal')(x)
 
     return Model(inputs, x, name='DenseNet')
-
 
 
 def standard_model(input_shape):
@@ -170,13 +170,102 @@ def ResNet50(input_shape):
     X = identity_block(X, 3, 512, 512, 2048)
     
     X = AveragePooling2D(pool_size=(2,2))(X)
-
+    print(K.int_shape(X))
     X = Flatten(X)
     X = Dense(100, activation='softmax')(X)
 
     model = Model(inputs=X_input, outputs=X)
 
     return model
+
+def conv_block(filters, kernel_size, strides, input_tensor):
+    norm = BatchNormalization(axis=3)(input_tensor)
+    act = Activation("relu")(norm)
+    conv = Conv2D(filters=filters, 
+                  kernel_size=kernel_size,
+                  strides=strides,
+                  padding="same",
+                  kernel_initializer="he_normal",
+                  kernel_regularizer=l2(1e-4))(act)
+
+    return conv
+
+def shortcut_block(input_tensor, output_tensor):
+    shortcut = input_tensor
+    stride_width = K.int_shape(output_tensor)[1]//K.int_shape(input_tensor)[1]
+    stride_height = K.int_shape(output_tensor)[2]//K.int_shape(input_tensor)[2]
+    print(K.int_shape(input_tensor))
+    print(K.int_shape(output_tensor))
+
+    if(stride_width > 1 or stride_height > 1 or K.int_shape(input_tensor)[3] != K.int_shape(output_tensor)[3]):
+        f = K.int_shape(output_tensor)[3]
+        shortcut = Conv2D(filters = f,
+                          kernel_size=(1,1),
+                          strides=(stride_width, stride_height),
+                          padding="valid",
+                          kernel_initializer="he_normal",
+                          kernel_regularizer=le(1e-4))(input_tensor)
+
+    return Add()([shortcut, output_tensor])
+
+
+def resnet18(input_shape, num_output):
+    X_input = Input(input_shape)
+    X = Conv2D(filters=64, kernel_size=(7,7), strides=(2,2), padding="same", kernel_regularizer=l2(1e-4))(X_input)
+    X = BatchNormalization(axis=3)(X)
+    X = Activation("relu")(X)
+    X = MaxPooling2D(pool_size=(3,3),strides=(2,2), padding="same")(X)
+
+    X_new = Conv2D(filters=64, 
+                kernel_size=(3,3),
+                strides=(1,1), 
+                padding="same", 
+                kernel_initializer="he_normal",
+                kernel_regularizer=l2(1e-4))(X)
+
+    X = conv_block(64, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+
+    X_new = conv_block(64, (3,3), (1,1), X)
+    X = conv_block(64, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+
+    X_new = conv_block(128, (3,3), (1,1), X)
+    X = conv_block(128, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+    X_new = conv_block(128, (3,3), (1,1), X)
+    X = conv_block(128, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+
+    X_new = conv_block(256, (3,3), (1,1), X)
+    X = conv_block(256, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+    X_new = conv_block(256, (3,3), (1,1), X)
+    X = conv_block(256, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+
+    X_new = conv_block(512, (3,3), (1,1), X)
+    X = conv_block(512, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+    X_new = conv_block(512, (3,3), (1,1), X)
+    X = conv_block(512, (3,3), (1,1), X_new)
+    X = shortcut_block(X, X_new)
+
+    X = BatchNormalization(axis=3)(X)
+    X = Activation("relu")(X)
+
+    block_shape = K.int_shape(X)
+    X = AveragePooling2D(pool_size=(block_shape[1], block_shape[2]),strides=(1,1))(X)
+
+    X = Flatten()(X)
+    X = Dense(units=num_output, kernel_initializer="he_normal", activation="softmax")(X)
+
+    model = Model(inputs=X_input, outputs=X)
+
+    return model
+
+
+
 
 
 def claim_90():
@@ -247,7 +336,14 @@ def senet_layer(x, nb_channels, ratio):
     xd = Dense(nb_channels, activation='sigmoid')
     return Multiply()([x, xd])
 
-
+def normalize(self,X_train,X_test):
+    mean = np.mean(X_train,axis=(0,1,2,3))
+    std = np.std(X_train, axis=(0, 1, 2, 3))
+    print(mean)
+    print(std)
+    X_train = (X_train-mean)/(std+1e-7)
+    X_test = (X_test-mean)/(std+1e-7)
+    return X_train, X_test
 
 def keras_cnn():
     with open("/content/drive/My Drive/CIFAR100 dataset/train.csv") as f:
@@ -256,6 +352,11 @@ def keras_cnn():
     x = train[:, :-2]
     y = train[:, -1:]
     x = np.reshape(x, (x.shape[0], 32, 32, 3))
+    x_test = test[:, :-2]
+    x_test = np.reshape(x_test, (x_test.shape[0], 32, 32, 3))
+    
+    x_train, x_test = Normalize(x_train, x_test)
+
     lbl = LabelBinarizer()
     y = lbl.fit_transform(y)
 
@@ -273,10 +374,8 @@ def keras_cnn():
     
     with open("/content/drive/My Drive/CIFAR100 dataset/test.csv") as f:
         test = np.loadtxt(f, delimiter=' ')
-    x = test[:, :-2]
-    x = np.reshape(x, (x.shape[0], 32, 32, 3))
-    
-    probs = model.predict(x)
+
+    probs = model.predict(x_test)
     preds = np.argmax(probs, axis=1)
     np.savetxt("outfile", preds, fmt='%i')
 
