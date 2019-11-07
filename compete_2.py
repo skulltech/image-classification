@@ -11,7 +11,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import keras
-from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, ZeroPadding2D, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add
+from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, ZeroPadding2D, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add, multiply
 from keras.models import Sequential, Model, load_model
 from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -34,16 +34,25 @@ class LimitTrainingTime(Callback):
             self.model.stop_training = True
 
 
+def senet_layer(x, nb_channels, ratio):
+    xd = GlobalAveragePooling2D()(x)
+    xd = Dense(int(nb_channels / ratio), activation='relu')(xd)
+    xd = Dense(nb_channels, activation='sigmoid')(xd)
+    return multiply([x, xd])
+
+
 
 def densenet_layer(x, nb_channels):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
+    x = Dropout(0.3)(x)
     x = Conv2D(nb_channels, (3, 3), padding='same', use_bias=False, kernel_regularizer=l2(1e-4), kernel_initializer='he_normal')(x)
     return x
 
 def transition_layer(x, nb_channels):
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
+    x = Dropout(0.5)(x)
     x = Conv2D(nb_channels, (1, 1), padding='same', use_bias=False, kernel_regularizer=l2(1e-4), kernel_initializer='he_normal')(x)
     x = AveragePooling2D((2, 2), strides=(2, 2))(x)
     return x
@@ -67,6 +76,7 @@ def densenet(input_shape, growth_rate=12, dense_blocks=3, dense_layers=12):
         x, nb_channels = densenet_block(x, nb_channels=nb_channels, growth_rate=growth_rate, nb_layers=dense_layers)
         if i < dense_blocks - 1:
             x = transition_layer(x, nb_channels)
+            # x = senet_layer(x, nb_channels, 0.3)
     
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
@@ -247,14 +257,6 @@ def claim_90():
 
 
 
-def senet_layer(x, nb_channels, ratio):
-    xd = GlobalAveragePooling2D()(x)
-    xd = Dense(nb_channels // ratio, activation='relu')
-    xd = Dense(nb_channels, activation='sigmoid')
-    return Multiply()([x, xd])
-
-
-
 def keras_cnn(args):
     with open(args.trainfile) as f:
         train = np.loadtxt(f, delimiter=' ')
@@ -268,14 +270,15 @@ def keras_cnn(args):
     y = lbl.fit_transform(y)
 
     # model = claim_90()
-    model = densenet(x.shape[1:], dense_layers=8, growth_rate=12)
+    model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
 
+    # opt = SGD(lr=0.1, momentum=0.9, decay=0.0001, nesterov=True)
     opt = adam()
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
 
     lmt = LimitTrainingTime()
     es = EarlyStopping(monitor='val_acc', patience=10)
-    mc = ModelCheckpoint('checkpoint', monitor='val_acc', save_best_only=True)
+    mc = ModelCheckpoint('checkpoint_4', monitor='val_acc', save_best_only=True)
     model.fit(x, y, validation_split=0.1, epochs=100, batch_size=128, callbacks=[lmt, es, mc])
     model = load_model('checkpoint')
     
@@ -285,7 +288,7 @@ def keras_cnn(args):
     x = np.reshape(x, (x.shape[0], 3, 32, 32))
     x = np.swapaxes(x, 1, 2)
     x = np.swapaxes(x, 2, 3)
-    
+        
     probs = model.predict(x)
     preds = np.argmax(probs, axis=1)
     np.savetxt(args.outputfile, preds, fmt='%i')

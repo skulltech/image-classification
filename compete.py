@@ -11,7 +11,7 @@ import tensorflow as tf
 # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 import keras
-from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, ZeroPadding2D, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add
+from keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, BatchNormalization, Activation, Input, ZeroPadding2D, Concatenate, AveragePooling2D, GlobalAveragePooling2D, Dropout, Multiply, Add, multiply
 from keras.models import Sequential, Model, load_model
 from keras.optimizers import rmsprop, adam
 from keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -32,6 +32,13 @@ class LimitTrainingTime(Callback):
         print(f'[*] Time elapsed: {hr}')
         if time_elapsed > TTL:
             self.model.stop_training = True
+
+
+def senet_layer(x, nb_channels, ratio):
+    xd = GlobalAveragePooling2D()(x)
+    xd = Dense(int(nb_channels / ratio), activation='relu')(xd)
+    xd = Dense(nb_channels, activation='sigmoid')(xd)
+    return multiply([x, xd])
 
 
 
@@ -69,6 +76,7 @@ def densenet(input_shape, growth_rate=12, dense_blocks=3, dense_layers=12):
         x, nb_channels = densenet_block(x, nb_channels=nb_channels, growth_rate=growth_rate, nb_layers=dense_layers)
         if i < dense_blocks - 1:
             x = transition_layer(x, nb_channels)
+            x = senet_layer(x, nb_channels, 0.3)
     
     x = BatchNormalization(gamma_regularizer=l2(1e-4), beta_regularizer=l2(1e-4))(x)
     x = Activation('relu')(x)
@@ -247,14 +255,72 @@ def claim_90():
     model.add(Activation('softmax'))
     return model
 
+def main_block(x, filters, n, strides, dropout):
+    x_res = x_res = Conv2D(filters, (3,3), strides=strides, padding="same")(x)# , kernel_regularizer=l2(5e-4)
+    x_res = BatchNormalization()(x_res)
+    x_res = Activation('relu')(x_res)
+    x_res = Conv2D(filters, (3,3), padding="same")(x_res)
+    # Alternative branch
+    x = Conv2D(filters, (1,1), strides=strides)(x)
+    # Merge Branches
+    x = Add()([x_res, x])
+
+    for i in range(n-1):
+        # Residual conection
+        x_res = BatchNormalization()(x)
+        x_res = Activation('relu')(x_res)
+        x_res = Conv2D(filters, (3,3), padding="same")(x_res)
+        # Apply dropout if given
+        if dropout: x_res = Dropout(dropout)(x)
+        # Second part
+        x_res = BatchNormalization()(x_res)
+        x_res = Activation('relu')(x_res)
+        x_res = Conv2D(filters, (3,3), padding="same")(x_res)
+        # Merge branches
+        x = Add()([x, x_res])
+
+    # Inter block part
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    return x
 
 
-def senet_layer(x, nb_channels, ratio):
-    xd = GlobalAveragePooling2D()(x)
-    xd = Dense(nb_channels // ratio, activation='relu')
-    xd = Dense(nb_channels, activation='sigmoid')
-    return Multiply()([x, xd])
+def wide_resnet(input_dims, output_dim, n, k, act= "relu", dropout=None):
+    """ Builds the model. Params:
+            - n: number of layers. WRNs are of the form WRN-N-K
+                 It must satisfy that (N-4)%6 = 0
+            - k: Widening factor. WRNs are of the form WRN-N-K
+                 It must satisfy that K%2 = 0
+            - input_dims: input dimensions for the model
+            - output_dim: output dimensions for the model
+            - dropout: dropout rate - default=0 (not recomended >0.3)
+            - act: activation function - default=relu. Build your custom
+                   one with keras.backend (ex: swish, e-swish)
+    """
+    # Ensure n & k are correct
+    assert (n-4)%6 == 0
+    assert k%2 == 0
+    n = (n-4)//6 
+    # This returns a tensor input to the model
+    inputs = Input(shape=(input_dims))
 
+    # Head of the model
+    x = Conv2D(16, (3,3), padding="same")(inputs)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+
+    # 3 Blocks (normal-residual)
+    x = main_block(x, 16*k, n, (1,1), dropout) # 0
+    x = main_block(x, 32*k, n, (2,2), dropout) # 1
+    x = main_block(x, 64*k, n, (2,2), dropout) # 2
+            
+    # Final part of the model
+    x = AveragePooling2D((8,8))(x)
+    x = Flatten()(x)
+    outputs = Dense(output_dim, activation="softmax")(x)
+
+    model = Model(inputs=inputs, outputs=outputs)
+    return model
 
 
 def keras_cnn(args):
@@ -270,14 +336,16 @@ def keras_cnn(args):
     y = lbl.fit_transform(y)
 
     # model = claim_90()
-    model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
+    # model = densenet(x.shape[1:], dense_layers=4, growth_rate=8)
+    model = wide_resnet(x.shape[1:], 100, 16, 4)
 
+    # opt = SGD(lr=0.1, momentum=0.9, decay=0.0001, nesterov=True)
     opt = adam()
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
 
     lmt = LimitTrainingTime()
     es = EarlyStopping(monitor='val_acc', patience=10)
-    mc = ModelCheckpoint('checkpoint', monitor='val_acc', save_best_only=True)
+    mc = ModelCheckpoint('checkpoint_4', monitor='val_acc', save_best_only=True)
     model.fit(x, y, validation_split=0.1, epochs=100, batch_size=128, callbacks=[lmt, es, mc])
     model = load_model('checkpoint')
     
