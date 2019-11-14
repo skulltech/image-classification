@@ -1,2 +1,4 @@
+numpy
+scikit-learn
 keras
 tensorflow
